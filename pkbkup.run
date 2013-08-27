@@ -1,0 +1,260 @@
+#!/bin/bash
+
+#simple packages clone/backup program
+
+if [[ $EUID -ne 0 ]]; then
+   echo "This script must be run as root" 1>&2
+   exit 1
+fi
+
+# variables
+DEBUG=1
+VERBOSE=0
+VERSION="0.01b"
+EMAIL="dzupd@yahoo.com"
+WEBSITE="https://github.com/dzup/pkbkup"
+UNAME=`basename $0`
+FILENAME_PART=`date +%Y%m%d-%H%M%S`
+FILENAME_BASH=$UNAME$FILENAME_PART.run #install program
+FILENAME_PACK=$UNAME$FILENAME_PART.packlist #dpkg --get-selection
+FILENAME_KEYS=$UNAME$FILENAME_PART.key  #apt-key exportall
+FILENAME_LIST=$UNAME$FILENAME_PART.list #/etc/apt/sources.list
+FILENAME_DIR=$UNAME$FILENAME_PART       #mkdir folder
+FORCE=0
+ONLINE=0
+
+displayhelp()
+{
+cat << EOF
+$UNAME $VERSION
+Simple program to clone/backup your installed packages, 
+source.list and your app-keys local or online 
+using http://sprunge.us
+
+You can use the generated program to reinstall all the 
+packages or share your installed packages with
+your friends.
+
+usage:  [-n <filename>|[-h][-v][-f][-o] 
+
+ -n filename of the program to create (defaults to DATE+TIME).
+ -v Verbose mode.
+ -o Upload to sprunge.us (default: Local)
+ -f Force file creation
+ -h Display this help.
+
+Report bugs to: $EMAIL 
+$UNAME homepage: $WEBSITE
+EOF
+}
+
+verbose(){
+	msg="$2"
+	if (( VERBOSE )); then
+		echo "$1"
+	fi
+}
+
+# main program
+
+#if (( $# == 0 )) ; then echo "Using defaults ..."; fi
+#Process the arguments
+# f = Force creating
+# n = name filename of program to restore, default date and time
+# r = h help
+# v = verbose
+# o = backup online (defaults to multiple files in a new directory)
+while getopts n:fhvo opt
+do
+case "$opt" in
+        h) 	displayhelp
+		exit 0
+	;;
+
+	v) 	VERBOSE=1
+		verbose "Verbose mode"
+	;;
+
+	o) 	ONLINE=1
+		verbose "Online mode"
+	;;
+
+	f) 	FORCE=1
+		verbose "Force mode"
+	;;
+
+       	n) 	FILENAME_PART=$OPTARG
+		verbose "Using $FILENAME_BASH"
+	;;
+
+      	\?) 	displayhelp
+		exit 0
+	;;
+    esac
+done
+
+FILENAME_BASH=$FILENAME_PART.run
+FILENAME_PACK=$FILENAME_PART.packlist
+FILENAME_KEYS=$FILENAME_PART.key
+FILENAME_LIST=$FILENAME_PART.list
+FILENAME_DIR=$FILENAME_PART
+FILENAME_TAR_GZ=$FILENAME_PART.tar.gz
+
+if (( VERBOSE )); then
+cat << EOF
+Creating $FILENAME_BASH
+Using ...
+ONLINE $ONLINE
+FORCE $FORCE
+FILENAME_BASH=$FILENAME_BASH
+FILENAME_PACK=$FILENAME_PACK
+FILENAME_KEYS=$FILENAME_KEYS
+FILENAME_LIST=$FILENAME_LIST
+FILENAME_DIR=$FILENAME_DIR
+FILENAME_TAR_GZ=$FILENAME_PART.tar.gz
+EOF
+fi
+
+case $ONLINE in 
+	1) verbose "Uploading files to sprunge, please wait ..."
+		echo $(wget -O- -q `dpkg --get-selections | curl -F 'sprunge=<-' http://sprunge.us`)
+		# cat /etc/apt/sources.list | curl -F 'sprunge=<-' http://sprunge.us
+		# wget -O- -q http://sprunge.us/KUCC
+		# apt-key exportall | curl -F 'sprunge=<-' http://sprunge.us
+		# wget -O- -q http://sprunge.us/eOLD
+		# wget -O- -q $(dpkg --get-selections | curl -F 'sprunge=<-' http://sprunge.us)
+		# wget -O- -q - $(dpkg --get-selections | curl -F 'sprunge=<-' http://sprunge.us)
+	
+	;;
+
+	*) verbose "Creating $FILENAME_TAR_GZ"
+		if [[ -f "$FILENAME_TAR_GZ" ]]; then
+  			# $FILENAME_TAR_GZ exists.
+			if (( ! $FORCE )); then
+				echo "$FILENAME_TAR_GZ exist, please use -f to force (all saved data will be lost!)"
+				exit 1
+			fi
+			verbose "Forcing $FILENAME_TAR_GZ creation, all previous data will be lost."
+			if ! rm $FILENAME_TAR_GZ; then
+				#an error while deleting file
+				echo "Fatal error when trying to wipe $FILENAME_TAR_GZ, check if you have the right permits, halting!"
+				exit 1
+			fi
+		fi
+		oldpwd=$(pwd)
+		verbose "Making /tmp/$FILENAME_DIR"
+		mkdir -p /tmp/$FILENAME_DIR
+		verbose "Changing directory"
+		cd /tmp/$FILENAME_DIR
+		verbose "Copying $UNAME to $(pwd)"
+		cp $oldpwd/$UNAME $UNAME
+		verbose "creating hardware.txt and hardware.html"
+		lshw > hardware.txt 2>&1 
+		lshw -html > hardware.html 2>&1 
+		verbose "Creating $FILENAME_PACK"
+		dpkg --get-selections > $FILENAME_PACK
+		verbose "Creating $FILENAME_LIST"
+		cp /etc/apt/sources.list $FILENAME_LIST
+		verbose "Creating $FILENAME_KEYS"
+		apt-key exportall > $FILENAME_KEYS
+		verbose "Creating $FILENAME_BASH"
+cat > $FILENAME_BASH <<DELIM
+#!/bin/bash
+
+# Program: $FILENAME_BASH
+
+# This program will install all installed packages, 
+# apt-keys, and source.list to this box.
+# Please read README
+
+# In this folder we included a copy of $UNAME $VERSION
+# Share this simple program with your friends!
+
+# Contact: $EMAIL
+# Website: $WEBSITE
+
+# Feel free to contact me, Thank you.
+
+# `uname -a`
+
+echo "You are about to install all the packages 
+listed in $FILENAME_PACK
+
+MAKE SURE YOU ARE CONNECTED TO A POWER source
+
+This proccess may take long
+DONT TURN OFF YOUR COMPUTER INTO FINISH!
+
+read -p "Press Enter to install or press Ctrl C to CANCEL!"
+
+apt-get update
+apt-get upgrade
+
+apt-key add $FILENAME_KEYS
+cp $FILENAME_LIST /etc/apt/sources.list 
+apt-get update
+apt-get install dselect
+dpkg --set-selections < $FILENAME_PACK
+apt-get dselect-upgrade -y
+
+echo "Success, now reboot your computer and enjoy!"
+
+# from http://askubuntu.com/questions/9135/best-way-to-backup-all-settings-list-of-installed-packages-tweaks-etc
+# END OF PROGRAM
+
+DELIM
+
+verbose "Creating README"
+cat > README <<DELIM
+./$UNAME
+Use this program to clone all your installed packages
+for backup or to share your installed packages with friends.
+
+for help, run 
+./$UNAME -h 
+
+This program will create a backup of your installed packages,
+all app-key and sources.list
+
+To clone a Package backup (if exist), run
+./$FILENAME_BASH
+
+*** MAKE SURE YOU READ THIS BEFORE! **
+
+Make sure your OS Version is similar to the one used to create
+this backup! take special attention to your HARDWARE!
+
+If your hardware is different from the one used here,
+consider editing $FILENAME_PACK and delete the offending
+line or blacklist the package.
+
+View hardware.txt for more details.
+or use your browser to see hardware.html
+
+Executing $FILENAME_BASH will install everything listed in
+$FILENAME_PACK into this computer.
+
+Please note that this may take a long time, since depends in 
+how many packages were installed in the original box, enjoy!
+
+If you are using a mobile device, make sure you are connected
+to the power source or your device have enough power to complete
+this task.
+
+Comments at: $EMAIL
+    Website: WEBSITE
+DELIM
+verbose "Making $FILENAME_BASH executable"
+chmod +x $FILENAME_BASH
+verbose "Creating $FILENAME_TAR_GZ"
+cd /tmp
+tar -czf $oldpwd/$FILENAME_TAR_GZ $FILENAME_DIR
+verbose "Deleting temporal files"
+rm -rf /tmp/$FILENAME_DIR
+verbose "Done, your backup file is $FILENAME_TAR_GZ"
+cd $oldpwd
+exit 0
+esac
+
+
+
