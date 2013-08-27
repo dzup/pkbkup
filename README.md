@@ -17,7 +17,7 @@ Make sure your OS Version is similar to the one used to create
 this backup! take special attention to your HARDWARE!
 
 If your hardware is different from the one used here,
-consider editing pkbkup.packlist and delete the offending
+edit *.packlist and delete the offending
 line or blacklist the package.
 
 View hardware.txt for more details.
