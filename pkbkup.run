@@ -27,8 +27,9 @@ displayhelp()
 {
 cat << EOF
 $UNAME $VERSION
+
 Simple program to clone/backup your installed packages, 
-source.list and your app-keys local or online 
+source.list and app-keys local or online 
 using http://sprunge.us
 
 You can use the generated program to reinstall all the 
@@ -55,7 +56,213 @@ verbose(){
 	fi
 }
 
+createtmpfolder(){
+		verbose "Making /tmp/$FILENAME_DIR"
+		mkdir -p /tmp/$FILENAME_DIR
+		verbose "Changing directory"
+		cd /tmp/$FILENAME_DIR
+		verbose "Copying $UNAME to $(pwd)"
+		cp $oldpwd/$UNAME $UNAME
+		verbose "creating hardware.txt and hardware.html"
+		lshw > hardware.txt 2>&1 
+		lshw -html > hardware.html 2>&1 
+		verbose "Creating $FILENAME_PACK"
+		dpkg --get-selections > $FILENAME_PACK
+		verbose "Creating $FILENAME_LIST"
+		cp /etc/apt/sources.list $FILENAME_LIST
+		verbose "Creating $FILENAME_KEYS"
+		apt-key exportall > $FILENAME_KEYS
+		verbose "Creating $FILENAME_BASH"
+}
+
+createbashfile() {
+	verbose "Making $FILENAME_BASH"
+	cat > $FILENAME_BASH <<DELIM
+#!/bin/bash
+
+# Program: $FILENAME_BASH
+
+# This program will install all installed packages, 
+# apt-keys, and source.list to this box.
+# Please read README.md
+
+# In this folder we included a copy of $UNAME $VERSION
+# Share this simple program with your friends!
+
+# Contact: $EMAIL
+# Website: $WEBSITE
+
+# Feel free to contact me, Thank you.
+
+# `uname -a`
+
+echo "You are about to install all the packages 
+listed in $FILENAME_PACK
+
+MAKE SURE YOU ARE CONNECTED TO A POWER source
+
+This proccess may take long
+DONT TURN OFF YOUR COMPUTER INTO FINISH!
+
+read -p "Press Enter to install or press Ctrl C to CANCEL!"
+
+apt-get update
+apt-get upgrade
+
+apt-key add $FILENAME_KEYS
+cp $FILENAME_LIST /etc/apt/sources.list 
+apt-get update
+apt-get install dselect
+dpkg --set-selections < $FILENAME_PACK
+apt-get dselect-upgrade -y
+
+echo "Success, now reboot your computer and enjoy!"
+
+# from http://askubuntu.com/questions/9135/best-way-to-backup-all-settings-list-of-installed-packages-tweaks-etc
+# END OF PROGRAM
+
+DELIM
+
+verbose "Making $FILENAME_BASH executable"
+chmod +x $FILENAME_BASH
+}
+
+createclonefile() {
+	verbose "Making online clone file"
+	cat > $FILENAME_CLONE <<DELIM
+#!/bin/bash
+
+# Program: $FILENAME_BASH
+
+# This program will install all installed packages, 
+# apt-keys, and source.list to this box.
+# Please read README.md
+
+# In this folder we included a copy of $UNAME $VERSION
+# Share this simple program with your friends!
+
+# Contact: $EMAIL
+# Website: $WEBSITE
+
+# Feel free to contact me, Thank you.
+
+# `uname -a`
+
+echo "You are about to install all the packages 
+listed in $FILENAME_PACK
+
+MAKE SURE YOU ARE CONNECTED TO A POWER source
+
+This proccess may take long
+DONT TURN OFF YOUR COMPUTER INTO FINISH!
+
+read -p "Press Enter to install or press Ctrl C to CANCEL!"
+
+		BASH_URL=$(cat $FILENAME_BASH | curl -F 'sprunge=<-' http://sprunge.us)
+		PACK_URL=$(cat $FILENAME_PACK | curl -F 'sprunge=<-' http://sprunge.us)
+		KEYS_URL=$(cat $FILENAME_KEYS | curl -F 'sprunge=<-' http://sprunge.us)
+		LIST_URL=$(cat $FILENAME_LIST | curl -F 'sprunge=<-' http://sprunge.us)
+		README_URL=$(cat README.md | curl -F 'sprunge=<-' http://sprunge.us)
+		UNAME_URL=$(cat  | curl -F 'sprunge=<-' http://sprunge.us)
+	
+		verbose "downloading all neccesary files from http://sprunge.us"
+		mkdir $FILENAME_DIR
+		wget -O- -q - $BASH_URL > $FILENAME_BASH
+		wget -O- -q - $PACK_URL > $FILENAME_PACK
+		wget -O- -q - $KEYS_URL > $FILENAME_KEYS
+		wget -O- -q - $LIST_URL> $FILENAME_LIST
+		wget -O- -q - $README_URL > README.md
+		wget -O- -q - $UNAME_URL > $UNAME
+		wget -O- -q - $HTML_URL > hardware.html
+		wget -O- -q - $TXT_URL > hardware.txt
+
+		apt-get update
+		apt-get upgrade
+
+		apt-key add $FILENAME_KEYS
+		cp $FILENAME_LIST /etc/apt/sources.list 
+		apt-get update
+		apt-get install dselect
+		dpkg --set-selections < $FILENAME_PACK
+		apt-get dselect-upgrade -y
+
+		echo "Success, now reboot your computer and enjoy!"
+cd -
+# from http://askubuntu.com/questions/9135/best-way-to-backup-all-settings-list-of-installed-packages-tweaks-etc
+# END OF PROGRAM
+
+DELIM
+
+verbose "Making $FILENAME_BASH executable"
+chmod +x $FILENAME_BASH
+}
+
+
+createreadmefile(){
+			
+verbose "Creating README.md"
+
+cat > README.md <<DELIM
+./$UNAME
+Use this program to clone all the installed packages
+for backup or to share your installed packages with friends.
+
+for help, run 
+./$UNAME -h 
+
+This program will create a backup of your installed packages,
+all app-key and sources.list
+
+To clone a Package backup (if exist), run
+./$FILENAME_BASH
+
+*** MAKE SURE YOU READ THIS BEFORE! **
+
+Make sure your OS Version is similar to the one used to create
+this backup! take special attention to your HARDWARE!
+
+If your hardware is different from the one used here,
+consider editing $FILENAME_PACK and delete the offending
+line or blacklist the package.
+
+View hardware.txt for more details.
+or use your browser to see hardware.html
+
+Executing $FILENAME_BASH will install everything listed in
+$FILENAME_PACK into this computer.
+
+Please note that this may take a long time, since depends in 
+how many packages were installed in the original box, enjoy!
+
+If you are using a mobile device, make sure you are connected
+to the power source or your device have enough power to complete
+this task.
+
+Comments at: $EMAIL
+    Website: WEBSITE
+DELIM
+}
+
+createtargzfile(){
+	verbose "Creating $FILENAME_TAR_GZ"
+	cd /tmp
+	tar -czf $oldpwd/$FILENAME_TAR_GZ $FILENAME_DIR
+}
+
+deletetmpfolder(){
+	verbose "Deleting temporal files"
+	rm -rf /tmp/$FILENAME_DIR
+	verbose "Done, your backup file is $FILENAME_TAR_GZ"
+	cd $oldpwd
+}
+
+changeowner(){
+	sudo chown $SUDO_USER $FILENAME_TAR_GZ
+	sudo chgrp $SUDO_USER $FILENAME_TAR_GZ
+}
+
 # main program
+oldpwd=$(pwd)
 
 #if (( $# == 0 )) ; then echo "Using defaults ..."; fi
 #Process the arguments
@@ -117,7 +324,29 @@ fi
 
 case $ONLINE in 
 	1) verbose "Uploading files to sprunge, please wait ..."
-		echo $(wget -O- -q `dpkg --get-selections | curl -F 'sprunge=<-' http://sprunge.us`)
+		createtmpfolder
+		createbashfile 
+		createreadmefile
+		verbose "Uploading files, please wait ..."
+		BASH_URL=$(cat $FILENAME_BASH | curl -F 'sprunge=<-' http://sprunge.us)
+		PACK_URL=$(cat $FILENAME_PACK | curl -F 'sprunge=<-' http://sprunge.us)
+		KEYS_URL=$(cat $FILENAME_KEYS | curl -F 'sprunge=<-' http://sprunge.us)
+		LIST_URL=$(cat $FILENAME_LIST | curl -F 'sprunge=<-' http://sprunge.us)
+		README_URL=$(cat README.md | curl -F 'sprunge=<-' http://sprunge.us)
+		UNAME_URL=$(cat $UNAME | curl -F 'sprunge=<-' http://sprunge.us)
+		TXT_URL=$(cat hardware.txt | curl -F 'sprunge=<-' http://sprunge.us)
+		HTML_URL=$(cat hardware.html | curl -F 'sprunge=<-' http://sprunge.us)
+	
+		FILENAME_CLONE=CLONE_$FILENAME_DIR.run
+		verbose "Creating clone file"
+		CLONE_URL=$(cat $FILENAME_CLONE | curl -F 'sprunge=<-' http://sprunge.us)
+		
+		echo "Done, now share this to clone your packages, have fun!
+wget -O- -q - $CLONE_URL > $FILENAME_CLONE
+chmod +x $FILENAME_CLONE
+./.$FILENAME_CLONE
+"
+		#echo $(wget -O- -q `dpkg --get-selections | curl -F 'sprunge=<-' http://sprunge.us`)
 		# cat /etc/apt/sources.list | curl -F 'sprunge=<-' http://sprunge.us
 		# wget -O- -q http://sprunge.us/KUCC
 		# apt-key exportall | curl -F 'sprunge=<-' http://sprunge.us
@@ -141,118 +370,25 @@ case $ONLINE in
 				exit 1
 			fi
 		fi
-		oldpwd=$(pwd)
-		verbose "Making /tmp/$FILENAME_DIR"
-		mkdir -p /tmp/$FILENAME_DIR
-		verbose "Changing directory"
-		cd /tmp/$FILENAME_DIR
-		verbose "Copying $UNAME to $(pwd)"
-		cp $oldpwd/$UNAME $UNAME
-		verbose "creating hardware.txt and hardware.html"
-		lshw > hardware.txt 2>&1 
-		lshw -html > hardware.html 2>&1 
-		verbose "Creating $FILENAME_PACK"
-		dpkg --get-selections > $FILENAME_PACK
-		verbose "Creating $FILENAME_LIST"
-		cp /etc/apt/sources.list $FILENAME_LIST
-		verbose "Creating $FILENAME_KEYS"
-		apt-key exportall > $FILENAME_KEYS
-		verbose "Creating $FILENAME_BASH"
-cat > $FILENAME_BASH <<DELIM
-#!/bin/bash
 
-# Program: $FILENAME_BASH
+		createtmpfolder
+		createbashfile 
+		createreadmefile
 
-# This program will install all installed packages, 
-# apt-keys, and source.list to this box.
-# Please read README
+		createtargzfile
+		deletetmpfolder
+		changeowner	
+		echo "Packages clone Ready! use
+		
+tar -xvf $FILENAME_TAR_GZ
+cd $FILENAME_DIR
 
-# In this folder we included a copy of $UNAME $VERSION
-# Share this simple program with your friends!
+Please read README file before cloning!
 
-# Contact: $EMAIL
-# Website: $WEBSITE
-
-# Feel free to contact me, Thank you.
-
-# `uname -a`
-
-echo "You are about to install all the packages 
-listed in $FILENAME_PACK
-
-MAKE SURE YOU ARE CONNECTED TO A POWER source
-
-This proccess may take long
-DONT TURN OFF YOUR COMPUTER INTO FINISH!
-
-read -p "Press Enter to install or press Ctrl C to CANCEL!"
-
-apt-get update
-apt-get upgrade
-
-apt-key add $FILENAME_KEYS
-cp $FILENAME_LIST /etc/apt/sources.list 
-apt-get update
-apt-get install dselect
-dpkg --set-selections < $FILENAME_PACK
-apt-get dselect-upgrade -y
-
-echo "Success, now reboot your computer and enjoy!"
-
-# from http://askubuntu.com/questions/9135/best-way-to-backup-all-settings-list-of-installed-packages-tweaks-etc
-# END OF PROGRAM
-
-DELIM
-
-verbose "Creating README"
-cat > README <<DELIM
-./$UNAME
-Use this program to clone all your installed packages
-for backup or to share your installed packages with friends.
-
-for help, run 
-./$UNAME -h 
-
-This program will create a backup of your installed packages,
-all app-key and sources.list
-
-To clone a Package backup (if exist), run
+To start cloning run
 ./$FILENAME_BASH
-
-*** MAKE SURE YOU READ THIS BEFORE! **
-
-Make sure your OS Version is similar to the one used to create
-this backup! take special attention to your HARDWARE!
-
-If your hardware is different from the one used here,
-consider editing $FILENAME_PACK and delete the offending
-line or blacklist the package.
-
-View hardware.txt for more details.
-or use your browser to see hardware.html
-
-Executing $FILENAME_BASH will install everything listed in
-$FILENAME_PACK into this computer.
-
-Please note that this may take a long time, since depends in 
-how many packages were installed in the original box, enjoy!
-
-If you are using a mobile device, make sure you are connected
-to the power source or your device have enough power to complete
-this task.
-
-Comments at: $EMAIL
-    Website: WEBSITE
-DELIM
-verbose "Making $FILENAME_BASH executable"
-chmod +x $FILENAME_BASH
-verbose "Creating $FILENAME_TAR_GZ"
-cd /tmp
-tar -czf $oldpwd/$FILENAME_TAR_GZ $FILENAME_DIR
-verbose "Deleting temporal files"
-rm -rf /tmp/$FILENAME_DIR
-verbose "Done, your backup file is $FILENAME_TAR_GZ"
-cd $oldpwd
+		
+to start cloning."	
 exit 0
 esac
 
